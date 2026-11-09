@@ -95,3 +95,22 @@ npm run build
 Deploy the API as a separate Node service (for example, on Render) and set `CORS_ORIGIN` to the deployed frontend origin. Set `DB_PATH` to a mounted persistent-disk location such as `/var/data/edith.sqlite` if the hosting plan supports persistent disks. Without persistent storage, a host restart or redeploy may reset the SQLite database.
 
 The Vite frontend is not connected to these endpoints yet; that is the next integration phase.
+
+
+## Frontend ↔ backend integration — Phase 3
+
+The React dashboard now attempts to load applications and events from the Express API on startup. App access toggles, permission changes, alert acknowledgements, demo event generation and demo reset use the API when it is reachable. The frontend falls back to browser-local demo state if the API is unavailable.
+
+### Local development
+
+1. Start the API in one terminal: `npm run server:dev`.
+2. Start the frontend in another terminal: `npm run dev`.
+3. The frontend defaults to `http://localhost:4000` for its API. Override it with `VITE_API_URL` when deploying.
+
+### Vercel + API hosting
+
+Add `VITE_API_URL` to the Vercel project's Environment Variables, pointing to the deployed API base URL (for example, `https://your-api-service.onrender.com`, without a trailing slash), then redeploy the frontend.
+
+On the API host, set `CORS_ORIGIN` to the exact deployed Vercel origin (for example, `https://your-project.vercel.app`). If using a custom domain, include that origin too, comma-separated.
+
+The UI shows whether the API is connected. If the API is unreachable, it continues in local demo mode. All account and event data remains simulated; no external accounts are accessed or changed.
