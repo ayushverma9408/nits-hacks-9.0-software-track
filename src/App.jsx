@@ -1,110 +1,89 @@
 import { useEffect, useMemo, useState } from 'react';
 
-const initialApps = [
-  { id: 1, name: 'Google Workspace', category: 'Productivity', icon: 'G', color: 'blue', access: 'Full access', scopes: ['Profile', 'Email', 'Drive'], connected: '12 days ago', risk: 'low', active: true },
-  { id: 2, name: 'Notion', category: 'Productivity', icon: 'N', color: 'light', access: 'Read & write', scopes: ['Profile', 'Workspace'], connected: '8 days ago', risk: 'low', active: true },
-  { id: 3, name: 'Unknown Device', category: 'Unverified', icon: '?', color: 'red', access: 'Unverified session', scopes: ['Profile', 'Location'], connected: 'Just now', risk: 'high', active: true }
+const seedApps = [
+  { id: 1, name: 'Google Workspace', category: 'Productivity', icon: 'G', color: 'blue', connected: '12 days ago', risk: 'Low', active: true, scopes: [{name:'Basic profile',on:true},{name:'Read email',on:true},{name:'Read and write Drive files',on:true},{name:'Manage contacts',on:false}] },
+  { id: 2, name: 'Notion', category: 'Productivity', icon: 'N', color: 'light', connected: '8 days ago', risk: 'Low', active: true, scopes: [{name:'Basic profile',on:true},{name:'Read workspace',on:true},{name:'Edit workspace content',on:true}] },
+  { id: 3, name: 'Unknown Device', category: 'Unverified', icon: '?', color: 'red', connected: 'Just now', risk: 'High', active: true, scopes: [{name:'Basic profile',on:true},{name:'Location access',on:true},{name:'Session access',on:true}] },
+  { id: 4, name: 'Figma', category: 'Design', icon: 'F', color: 'purple', connected: '3 days ago', risk: 'Medium', active: true, scopes: [{name:'Basic profile',on:true},{name:'Read team files',on:true},{name:'Edit team files',on:false}] }
 ];
-
-const initialEvents = [
-  { id: 1, app: 'Unknown Device', detail: 'New sign-in pattern detected', time: '2 min ago', severity: 'high', type: 'Anomaly' },
-  { id: 2, app: 'Google Workspace', detail: 'Drive permission accessed', time: '18 min ago', severity: 'normal', type: 'Access' },
-  { id: 3, app: 'Notion', detail: 'Workspace token refreshed', time: '1 hour ago', severity: 'normal', type: 'Session' },
-  { id: 4, app: 'Google Workspace', detail: 'Connected application verified', time: 'Yesterday', severity: 'normal', type: 'Verification' }
+const seedEvents = [
+  {id:1,app:'Unknown Device',detail:'Unrecognized sign-in pattern detected',time:'2 min ago',severity:'High',type:'Anomaly',ack:false},
+  {id:2,app:'Google Workspace',detail:'Drive permission accessed',time:'18 min ago',severity:'Normal',type:'Access',ack:false},
+  {id:3,app:'Notion',detail:'Workspace session refreshed',time:'1 hour ago',severity:'Normal',type:'Session',ack:false},
+  {id:4,app:'Google Workspace',detail:'Connected application verified',time:'Yesterday',severity:'Normal',type:'Verification',ack:true},
+  {id:5,app:'Figma',detail:'New permission scope reviewed',time:'Yesterday',severity:'Medium',type:'Permission',ack:true}
 ];
+const weekly = [{day:'MON',value:35},{day:'TUE',value:52},{day:'WED',value:42},{day:'THU',value:70},{day:'FRI',value:48},{day:'SAT',value:88},{day:'SUN',value:60}];
+const nav = [{id:'overview',label:'Overview',icon:'◈'},{id:'applications',label:'Applications',icon:'▦'},{id:'permissions',label:'Permissions',icon:'⌑'},{id:'activity',label:'Activity monitor',icon:'⌁'},{id:'alerts',label:'Alerts & notifications',icon:'♧'}];
 
-const weekly = [
-  { day: 'MON', value: 35 }, { day: 'TUE', value: 52 }, { day: 'WED', value: 42 },
-  { day: 'THU', value: 70 }, { day: 'FRI', value: 48 }, { day: 'SAT', value: 88 }, { day: 'SUN', value: 60 }
-];
-
-function scoreFor(apps, events) {
-  const active = apps.filter(a => a.active);
-  const highApps = active.filter(a => a.risk === 'high').length;
-  const highEvents = events.filter(e => e.severity === 'high').length;
-  return Math.max(18, Math.min(99, 96 - highApps * 18 - highEvents * 9 - Math.max(0, active.length - 4) * 3));
+function scoreFor(apps,events){
+  const active=apps.filter(a=>a.active);
+  const high=active.filter(a=>a.risk==='High').length;
+  const medium=active.filter(a=>a.risk==='Medium').length;
+  const unack=events.filter(e=>e.severity!=='Normal'&&!e.ack).length;
+  const excess=active.reduce((n,a)=>n+a.scopes.filter(s=>s.on).length,0);
+  return Math.max(18,Math.min(99,96-high*15-medium*5-unack*5-Math.max(0,excess-7)));
 }
-
-function App() {
-  const [apps, setApps] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('edith-apps')) || initialApps; } catch { return initialApps; }
-  });
-  const [events, setEvents] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('edith-events')) || initialEvents; } catch { return initialEvents; }
-  });
-  const [filter, setFilter] = useState('All activity');
-  const [notice, setNotice] = useState('');
-  const [showAll, setShowAll] = useState(false);
-
-  useEffect(() => { localStorage.setItem('edith-apps', JSON.stringify(apps)); }, [apps]);
-  useEffect(() => { localStorage.setItem('edith-events', JSON.stringify(events)); }, [events]);
-
-  const score = useMemo(() => scoreFor(apps, events), [apps, events]);
-  const activeApps = apps.filter(a => a.active).length;
-  const highEvents = events.filter(e => e.severity === 'high').length;
-  const visibleEvents = events.filter(e => filter === 'All activity' || (filter === 'Alerts' ? e.severity === 'high' : e.type === filter));
-  const displayedEvents = showAll ? visibleEvents : visibleEvents.slice(0, 4);
-
-  function updateApp(id, action) {
-    const target = apps.find(a => a.id === id);
-    if (!target) return;
-    setApps(prev => prev.map(a => a.id === id ? { ...a, active: action === 'restore' ? true : false } : a));
-    const verb = action === 'restore' ? 'Access restored for' : 'Access revoked for';
-    const newEvent = { id: Date.now(), app: target.name, detail: verb + ' ' + target.name, time: 'Just now', severity: 'normal', type: 'Control' };
-    setEvents(prev => [newEvent, ...prev]);
-    setNotice(action === 'restore' ? target.name + ' access restored' : target.name + ' access revoked');
-    window.setTimeout(() => setNotice(''), 2600);
+function App(){
+  const [apps,setApps]=useState(()=>{try{return JSON.parse(localStorage.getItem('edith-apps-v2'))||seedApps}catch{return seedApps}});
+  const [events,setEvents]=useState(()=>{try{return JSON.parse(localStorage.getItem('edith-events-v2'))||seedEvents}catch{return seedEvents}});
+  const [page,setPage]=useState('overview');
+  const [filter,setFilter]=useState('All');
+  const [query,setQuery]=useState('');
+  const [notice,setNotice]=useState('');
+  const [showNotifications,setShowNotifications]=useState(false);
+  const [category,setCategory]=useState('All categories');
+  useEffect(()=>{localStorage.setItem('edith-apps-v2',JSON.stringify(apps))},[apps]);
+  useEffect(()=>{localStorage.setItem('edith-events-v2',JSON.stringify(events))},[events]);
+  const score=useMemo(()=>scoreFor(apps,events),[apps,events]);
+  const active=apps.filter(a=>a.active).length;
+  const pending=events.filter(e=>e.severity!=='Normal'&&!e.ack).length;
+  const enabledScopes=apps.reduce((n,a)=>n+a.scopes.filter(s=>s.on).length,0);
+  const notify=(msg)=>{setNotice(msg);window.setTimeout(()=>setNotice(''),2600)};
+  function addEvent(app,detail,severity='Normal',type='Activity'){
+    setEvents(prev=>[{id:Date.now(),app,detail,time:'Just now',severity,type,ack:false},...prev]);
   }
-
-  function resetDemo() {
-    setApps(initialApps);
-    setEvents(initialEvents);
-    setFilter('All activity');
-    setNotice('Demo data restored');
-    window.setTimeout(() => setNotice(''), 2600);
+  function toggleApp(id){
+    const target=apps.find(a=>a.id===id); if(!target)return;
+    setApps(prev=>prev.map(a=>a.id===id?{...a,active:!a.active}:a));
+    addEvent(target.name,(target.active?'Access revoked for ':'Access restored for ')+target.name,'Normal','Control');
+    notify(target.name+(target.active?' access revoked':' access restored'));
   }
-
-  return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="brand"><div className="brand-mark">E</div><div><b>E.D.I.T.H.</b><span>IDENTITY INTELLIGENCE</span></div></div>
-        <div className="side-label">WORKSPACE</div>
-        <button className="nav-item selected"><span>◈</span> Overview <i>01</i></button>
-        <button className="nav-item" onClick={() => document.getElementById('connections')?.scrollIntoView({ behavior: 'smooth' })}><span>▦</span> Connected apps</button>
-        <button className="nav-item" onClick={() => document.getElementById('activity')?.scrollIntoView({ behavior: 'smooth' })}><span>⌁</span> Activity monitor</button>
-        <button className="nav-item" onClick={() => document.getElementById('recommendations')?.scrollIntoView({ behavior: 'smooth' })}><span>✧</span> Recommendations</button>
-        <div className="side-bottom"><div className="side-label">SYSTEM STATUS</div><div className="system-status"><span className="pulse"></span><div><b>All systems operational</b><small>Local demo environment</small></div></div><div className="profile"><div className="avatar">AV</div><div><b>Ayush Verma</b><small>Personal workspace</small></div><span className="dots">•••</span></div></div>
-      </aside>
-
-      <main className="main">
-        <header className="topbar"><div className="breadcrumb">Workspace <span>/</span> <b>Overview</b></div><div className="top-actions"><span className="live"><i></i> LIVE MONITORING</span><button className="icon-btn" title="Notifications">♧<em>{highEvents}</em></button><div className="avatar small">AV</div></div></header>
-        <div className="content">
-          <section className="welcome"><div><div className="eyebrow"><span className="eyebrow-line"></span> YOUR DIGITAL IDENTITY, AT A GLANCE</div><h1>Identity <span>command center.</span></h1><p>Understand what has access to your digital life. Stay in control.</p></div><button className="outline-btn" onClick={resetDemo}>↻ &nbsp; Reset demo</button></section>
-
-          <section className="stats-grid">
-            <div className="stat-card score-card"><div className="stat-head"><span>IDENTITY TRUST SCORE</span><span className="tiny-pill">LIVE</span></div><div className="score-row"><div className="score-number">{score}<small>/100</small></div><div className="score-ring" style={{ '--score': score + '%' }}><div><b>{score >= 80 ? 'Strong' : score >= 55 ? 'Moderate' : 'At risk'}</b><small>Trust level</small></div></div></div><div className="meter"><span style={{ width: score + '%' }}></span></div><div className="stat-foot"><span className="green-text">↗ Updated in real time</span><span>Heuristic model</span></div></div>
-            <div className="stat-card"><div className="stat-head"><span>CONNECTED APPLICATIONS</span><span className="stat-icon blue-icon">▦</span></div><div className="stat-value">{activeApps}<small> / {apps.length}</small></div><div className="stat-foot"><span>Currently authorized</span><span className="muted">App connections</span></div><div className="mini-bars"><i style={{height:'42%'}}></i><i style={{height:'65%'}}></i><i style={{height:'50%'}}></i><i style={{height:'82%'}}></i><i style={{height:'60%'}}></i><i style={{height:'95%'}}></i><i style={{height:'72%'}}></i></div></div>
-            <div className="stat-card"><div className="stat-head"><span>SECURITY ALERTS</span><span className="stat-icon red-icon">⌁</span></div><div className="stat-value">{highEvents.toString().padStart(2,'0')}<small> active</small></div><div className="stat-foot"><span className={highEvents ? 'red-text' : 'green-text'}>{highEvents ? 'Needs your attention' : 'No active alerts'}</span><span className="muted">Risk signals</span></div><div className="alert-track"><span style={{width: Math.min(100, highEvents * 28) + '%'}}></span></div></div>
-            <div className="stat-card"><div className="stat-head"><span>PERMISSIONS REVIEWED</span><span className="stat-icon purple-icon">✓</span></div><div className="stat-value">{apps.filter(a => !a.active).length}<small> revoked</small></div><div className="stat-foot"><span>Actions this session</span><span className="muted">Audit trail</span></div><div className="review-stamp">◷ &nbsp; SESSION TRACKED</div></div>
-          </section>
-
-          <section className="middle-grid">
-            <div className="panel activity-panel" id="activity"><div className="panel-head"><div><div className="eyebrow">BEHAVIOUR ANALYTICS</div><h2>Activity overview</h2></div><span className="period">LAST 7 DAYS⌄</span></div><div className="chart-summary"><b>248 <span>events</span></b><small className="green-text">↗ 12.8% <span className="muted">vs. previous week</span></small></div><div className="chart"><div className="y-labels"><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div><div className="chart-area"><div className="grid-lines"><i></i><i></i><i></i><i></i><i></i></div><div className="bars">{weekly.map((d,i)=><div className="bar-wrap" key={d.day}><div className={'bar ' + (i===5?'bar-highlight':'')} style={{height:d.value+'%'}} title={d.value+' events'}></div><small>{d.day}</small></div>)}</div></div></div><div className="chart-legend"><span><i className="legend-blue"></i> Normal activity</span><span><i className="legend-purple"></i> Higher activity</span><span className="muted">Illustrative sample data</span></div></div>
-            <div className="panel signal-panel"><div className="panel-head"><div><div className="eyebrow">HEURISTIC ENGINE</div><h2>Risk assessment</h2></div><span className="shield">⬡</span></div><div className="signal-score"><div className="signal-number">{highEvents ? '1' : '0'}<small> flagged</small></div><span className={highEvents ? 'risk-chip' : 'safe-chip'}>{highEvents ? 'Review required' : 'Looking good'}</span></div><div className="risk-line"><span>Unusual sign-in pattern</span><b className={highEvents ? 'red-text' : 'green-text'}>{highEvents ? 'DETECTED' : 'CLEAR'}</b></div><div className="risk-line"><span>Connected app permissions</span><b className="green-text">MONITORED</b></div><div className="risk-line"><span>Session activity</span><b className="green-text">NORMAL</b></div><div className="signal-note">ⓘ <span>Signals are generated from the sample events in this local demo. They are not a real security assessment.</span></div></div>
-          </section>
-
-          <section className="panel connections-panel" id="connections"><div className="panel-head"><div><div className="eyebrow">ACCESS MANAGEMENT</div><h2>Connected applications</h2><p className="panel-sub">Review the services linked to your digital identity.</p></div><span className="count-pill">{activeApps} ACTIVE</span></div><div className="app-list">{apps.map(app=><div className={'app-row ' + (!app.active?'inactive':'')} key={app.id}><div className={'app-icon '+app.color}>{app.icon}</div><div className="app-info"><b>{app.name}</b><small>{app.category} · Connected {app.connected}</small></div><div className="app-permissions"><small>PERMISSIONS</small><span>{app.scopes.join(' · ')}</span></div><div className="app-access"><small>ACCESS LEVEL</small><span>{app.access}</span></div><div className="app-risk"><span className={app.risk==='high' && app.active?'risk-chip':'safe-chip'}>{!app.active?'REVOKED':app.risk==='high'?'REVIEW':'LOW RISK'}</span></div><button className={app.active?'revoke-btn':'restore-btn'} onClick={()=>updateApp(app.id, app.active?'revoke':'restore')}>{app.active?'Revoke access':'Restore'}</button></div>)}</div><div className="panel-foot"><span>Showing {apps.length} connected services · Demo data</span><span>Changes are saved in this browser</span></div></section>
-
-          <section className="bottom-grid">
-            <div className="panel events-panel"><div className="panel-head"><div><div className="eyebrow">TRANSPARENCY FEED</div><h2>Recent activity</h2></div><select value={filter} onChange={e=>{setFilter(e.target.value);setShowAll(false)}}><option>All activity</option><option>Alerts</option><option>Access</option><option>Session</option><option>Control</option><option>Verification</option></select></div><div className="event-list">{displayedEvents.length ? displayedEvents.map(ev=><div className="event-row" key={ev.id}><div className={'event-dot '+(ev.severity==='high'?'event-alert':'')}></div><div className="event-copy"><b>{ev.detail}</b><small>{ev.app} · {ev.type}</small></div><span className="event-time">{ev.time}</span></div>) : <div className="empty-state">No events in this view.</div>}</div>{visibleEvents.length>4&&<button className="text-btn" onClick={()=>setShowAll(v=>!v)}>{showAll?'Show less':'View all activity →'}</button>}</div>
-            <div className="panel recommendation-panel" id="recommendations"><div className="panel-head"><div><div className="eyebrow">NEXT BEST ACTION</div><h2>Recommendations</h2></div><span className="spark">✧</span></div>{highEvents ? <div className="recommendation"><div className="recommend-icon warning">!</div><div><b>Review an unfamiliar session</b><p>An unverified device has appeared in the sample activity feed. Review it and revoke access if it is not recognized.</p><button className="recommend-action" onClick={()=>document.getElementById('connections')?.scrollIntoView({behavior:'smooth'})}>Review connected apps →</button></div></div> : <div className="recommendation"><div className="recommend-icon">✓</div><div><b>Your demo workspace looks clear</b><p>No high-risk sample signals are currently active. Continue reviewing permissions periodically.</p></div></div>}<div className="recommend-foot">✦ &nbsp; Recommendations are generated from local demo signals.</div></div>
-          </section>
-          <footer><span>E.D.I.T.H. <i>·</i> Enhanced Digital Identity, Trust & Heuristics</span><span>HACKATHON PROTOTYPE <i>·</i> NOT A LIVE SECURITY SERVICE</span></footer>
-        </div>
-      </main>
-      {notice && <div className="toast">✓ &nbsp; {notice}</div>}
-    </div>
-  );
+  function toggleScope(appId,scopeName){
+    const target=apps.find(a=>a.id===appId);
+    setApps(prev=>prev.map(a=>a.id===appId?{...a,scopes:a.scopes.map(s=>s.name===scopeName?{...s,on:!s.on}:s)}:a));
+    const scope=target?.scopes.find(s=>s.name===scopeName);
+    addEvent(target?.name||'Application',(scope?.on?'Permission disabled: ':'Permission enabled: ')+scopeName,'Normal','Permission');
+    notify((scope?.on?'Disabled ':'Enabled ')+scopeName);
+  }
+  function acknowledge(id){setEvents(prev=>prev.map(e=>e.id===id?{...e,ack:true}:e));notify('Alert marked as reviewed')}
+  function reset(){setApps(seedApps);setEvents(seedEvents);setFilter('All');setQuery('');notify('Demo workspace restored')}
+  function generate(){const samples=[['Google Workspace','A new Drive file was accessed','Normal','Access'],['Notion','A workspace permission was requested','Medium','Permission'],['Unknown Device','Unusual session activity detected','High','Anomaly'],['Figma','Design workspace session refreshed','Normal','Session']];const x=samples[Math.floor(Math.random()*samples.length)];addEvent(...x);notify('Demo activity event generated')}
+  const filteredApps=apps.filter(a=>(category==='All categories'||a.category===category)&&(a.name.toLowerCase().includes(query.toLowerCase())));
+  const filteredEvents=events.filter(e=>filter==='All'||(filter==='Alerts'?e.severity!=='Normal':e.type===filter));
+  const title=nav.find(n=>n.id===page)?.label||'Overview';
+  const header=<header className="topbar"><div className="breadcrumb">E.D.I.T.H. <span>/</span> <b>{title}</b></div><div className="top-actions"><span className="live"><i/> DEMO MONITOR</span><button className="icon-btn" title="Notifications" onClick={()=>setShowNotifications(v=>!v)}>♧<em>{pending}</em></button><div className="avatar small">AV</div></div></header>;
+  const stats=<section className="stats-grid">
+    <div className="stat-card score-card"><div className="stat-head"><span>IDENTITY TRUST SCORE</span><span className="tiny-pill">DEMO</span></div><div className="score-row"><div className="score-number">{score}<small>/100</small></div><div className="score-ring" style={{'--score':score+'%'}}><div><b>{score>=80?'Strong':score>=55?'Moderate':'At risk'}</b><small>Trust level</small></div></div></div><div className="meter"><span style={{width:score+'%'}}/></div><div className="stat-foot"><span className="green-text">↗ Heuristic score</span><span>Sample signals</span></div></div>
+    <div className="stat-card"><div className="stat-head"><span>CONNECTED APPLICATIONS</span><span className="stat-icon blue-icon">▦</span></div><div className="stat-value">{active}<small> / {apps.length}</small></div><div className="stat-foot"><span>Currently authorized</span><span className="muted">App connections</span></div><div className="mini-bars">{[42,65,50,82,60,95,72].map((h,i)=><i key={i} style={{height:h+'%'}}/>)}</div></div>
+    <div className="stat-card"><div className="stat-head"><span>OPEN SECURITY ALERTS</span><span className="stat-icon red-icon">⌁</span></div><div className="stat-value">{String(pending).padStart(2,'0')}<small> pending</small></div><div className="stat-foot"><span className={pending?'red-text':'green-text'}>{pending?'Review recommended':'All reviewed'}</span><span className="muted">Risk signals</span></div><div className="alert-track"><span style={{width:Math.min(100,pending*28)+'%'}}/></div></div>
+    <div className="stat-card"><div className="stat-head"><span>ACTIVE PERMISSIONS</span><span className="stat-icon purple-icon">✓</span></div><div className="stat-value">{enabledScopes}<small> enabled</small></div><div className="stat-foot"><span>Across all applications</span><span className="muted">Scope inventory</span></div><div className="review-stamp">◷ &nbsp; LOCAL DEMO STATE</div></div>
+  </section>;
+  const chart=<div className="panel activity-panel"><div className="panel-head"><div><div className="eyebrow">BEHAVIOUR ANALYTICS</div><h2>Activity overview</h2></div><span className="period">LAST 7 DAYS</span></div><div className="chart-summary"><b>248 <span>events</span></b><small className="green-text">↗ Sample activity trend</small></div><div className="chart"><div className="y-labels"><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div><div className="chart-area"><div className="grid-lines">{[1,2,3,4,5].map(x=><i key={x}/>)}</div><div className="bars">{weekly.map((d,i)=><div className="bar-wrap" key={d.day}><div className={'bar '+(i===5?'bar-highlight':'')} style={{height:d.value+'%'}} title={d.value+' sample events'}/><small>{d.day}</small></div>)}</div></div></div><div className="chart-legend"><span><i className="legend-blue"/> Normal activity</span><span><i className="legend-purple"/> Higher activity</span><span className="muted">Illustrative sample data</span></div></div>;
+  const riskPanel=<div className="panel signal-panel"><div className="panel-head"><div><div className="eyebrow">HEURISTIC ENGINE</div><h2>Risk assessment</h2></div><span className="shield">⬡</span></div><div className="signal-score"><div className="signal-number">{pending}<small> open signals</small></div><span className={pending?'risk-chip':'safe-chip'}>{pending?'Review required':'Looking good'}</span></div>{[['Unverified application',apps.some(a=>a.active&&a.risk==='High')?'DETECTED':'CLEAR'],['Permission exposure',enabledScopes+' ENABLED'],['Unreviewed alerts',pending+' PENDING']].map(([a,b])=><div className="risk-line" key={a}><span>{a}</span><b className={b==='DETECTED'?'red-text':'green-text'}>{b}</b></div>)}<div className="signal-note">ⓘ <span>Risk signals and trust score are generated from local sample data. This is not a real security assessment.</span></div></div>;
+  const eventRows=(list)=>list.length?list.map(ev=><div className="event-row" key={ev.id}><div className={'event-dot '+(ev.severity==='High'?'event-alert':ev.severity==='Medium'?'event-medium':'')}/><div className="event-copy"><b>{ev.detail}</b><small>{ev.app} · {ev.type}</small></div><span className="severity-text">{ev.severity}</span><span className="event-time">{ev.time}</span>{page==='alerts'&&!ev.ack&&<button className="mini-action" onClick={()=>acknowledge(ev.id)}>Review</button>}</div>):<div className="empty-state">No events match this filter.</div>;
+  return <div className="shell">
+    <aside className="sidebar"><div className="brand"><div className="brand-mark">E</div><div><b>E.D.I.T.H.</b><span>IDENTITY INTELLIGENCE</span></div></div><div className="side-label">WORKSPACE</div>{nav.map(n=><button key={n.id} className={'nav-item '+(page===n.id?'selected':'')} onClick={()=>{setPage(n.id);setShowNotifications(false)}}><span>{n.icon}</span>{n.label}{n.id==='alerts'&&pending>0?<i>{pending}</i>:null}</button>)}<div className="side-bottom"><div className="side-label">SYSTEM STATUS</div><div className="system-status"><span className="pulse"/><div><b>Demo environment ready</b><small>Simulated identity signals</small></div></div><div className="profile"><div className="avatar">AV</div><div><b>Personal workspace</b><small>Hackathon prototype</small></div><span className="dots">•••</span></div></div></aside>
+    <main className="main">{header}<div className="content">
+      {page==='overview'&&<><section className="welcome"><div><div className="eyebrow"><span className="eyebrow-line"/> YOUR DIGITAL IDENTITY, AT A GLANCE</div><h1>Identity <span>command center.</span></h1><p>Understand what has access to your digital life. Stay in control.</p></div><button className="outline-btn" onClick={reset}>↻ &nbsp; Reset demo</button></section>{stats}<section className="middle-grid">{chart}{riskPanel}</section><section className="bottom-grid"><div className="panel events-panel"><div className="panel-head"><div><div className="eyebrow">TRANSPARENCY FEED</div><h2>Recent activity</h2></div><button className="text-btn" onClick={()=>setPage('activity')}>View all →</button></div><div className="event-list">{eventRows(events.slice(0,4))}</div></div><div className="panel recommendation-panel"><div className="panel-head"><div><div className="eyebrow">NEXT BEST ACTION</div><h2>Recommendations</h2></div><span className="spark">✧</span></div><div className="recommendation"><div className="recommend-icon warning">!</div><div><b>Review unfamiliar access</b><p>An unverified device appears in the sample dataset. Inspect its scopes and revoke access if appropriate.</p><button className="recommend-action" onClick={()=>setPage('applications')}>Review applications →</button></div></div><div className="recommend-foot">✦ &nbsp; Suggestions use local demo signals.</div></div></section></>}
+      {page==='applications'&&<><section className="page-intro"><div><div className="eyebrow">ACCESS MANAGEMENT</div><h1>Application <span>directory.</span></h1><p>Search connected services, inspect risk and control access.</p></div><button className="outline-btn" onClick={reset}>↻ Reset demo</button></section>{stats}<section className="panel page-panel"><div className="panel-head"><div><div className="eyebrow">CONNECTED SERVICES</div><h2>All applications <span className="count-pill">{apps.length} TOTAL</span></h2></div><div className="toolbar"><input aria-label="Search applications" placeholder="Search applications..." value={query} onChange={e=>setQuery(e.target.value)}/><select value={category} onChange={e=>setCategory(e.target.value)}><option>All categories</option><option>Productivity</option><option>Design</option><option>Unverified</option></select></div></div><div className="app-list">{filteredApps.map(app=><div className={'app-row '+(!app.active?'inactive':'')} key={app.id}><div className={'app-icon '+app.color}>{app.icon}</div><div className="app-info"><b>{app.name}</b><small>{app.category} · Connected {app.connected}</small></div><div className="app-permissions"><small>ENABLED SCOPES</small><span>{app.scopes.filter(s=>s.on).length} permissions</span></div><div className="app-access"><small>RISK LEVEL</small><span>{app.risk}</span></div><div className="app-risk"><span className={app.active?(app.risk==='High'?'risk-chip':app.risk==='Medium'?'medium-chip':'safe-chip'):'revoked-chip'}>{!app.active?'REVOKED':app.risk.toUpperCase()}</span></div><button className={app.active?'revoke-btn':'restore-btn'} onClick={()=>toggleApp(app.id)}>{app.active?'Revoke access':'Restore'}</button></div>)}</div>{filteredApps.length===0&&<div className="empty-state">No applications found.</div>}<div className="panel-foot"><span>Showing {filteredApps.length} of {apps.length} services</span><span>Changes saved in this browser</span></div></section></>}
+      {page==='permissions'&&<><section className="page-intro"><div><div className="eyebrow">GRANULAR ACCESS CONTROL</div><h1>Permission <span>manager.</span></h1><p>Review each application's requested scopes and switch off unnecessary access.</p></div></section>{stats}<section className="permission-grid">{apps.map(app=><div className="panel permission-card" key={app.id}><div className="permission-app-head"><div className={'app-icon '+app.color}>{app.icon}</div><div><b>{app.name}</b><small>{app.category} · {app.active?'Connected':'Access revoked'}</small></div><span className={app.active?'safe-chip':'revoked-chip'}>{app.active?'ACTIVE':'REVOKED'}</span></div>{app.scopes.map(scope=><div className="scope-row" key={scope.name}><div><b>{scope.name}</b><small>{scope.name==='Basic profile'?'Identity information':scope.name.includes('Drive')?'Cloud file access':scope.name.includes('Location')?'Device location data':'Application-level permission'}</small></div><button disabled={!app.active} aria-pressed={scope.on} className={'switch '+(scope.on?'on':'')} onClick={()=>toggleScope(app.id,scope.name)}><span/></button></div>)}<div className="permission-foot">{app.scopes.filter(s=>s.on).length} of {app.scopes.length} scopes enabled</div></div>)}</section></>}
+      {page==='activity'&&<><section className="page-intro"><div><div className="eyebrow">TRANSPARENCY & AUDIT</div><h1>Activity <span>monitor.</span></h1><p>A chronological view of application and permission events.</p></div><button className="primary-btn" onClick={generate}>＋ Generate demo event</button></section>{stats}<section className="panel page-panel"><div className="panel-head"><div><div className="eyebrow">EVENT STREAM</div><h2>Activity history</h2></div><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="All">All activity</option><option value="Alerts">Alerts only</option><option>Access</option><option>Session</option><option>Control</option><option>Permission</option><option>Anomaly</option><option>Verification</option></select></div><div className="event-list large-event-list">{eventRows(filteredEvents)}</div><div className="panel-foot"><span>{filteredEvents.length} events shown</span><span>Newest first · Demo event stream</span></div></section></>}
+      {page==='alerts'&&<><section className="page-intro"><div><div className="eyebrow">SECURITY CENTRE</div><h1>Alerts & <span>notifications.</span></h1><p>Prioritize unusual signals and track which alerts have been reviewed.</p></div><button className="outline-btn" onClick={()=>setShowNotifications(v=>!v)}>♧ Notification summary</button></section>{stats}<section className="panel page-panel"><div className="panel-head"><div><div className="eyebrow">RISK SIGNALS</div><h2>Alert inbox</h2></div><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="Alerts">All alerts</option><option value="All">All events</option><option value="Anomaly">Anomalies</option><option value="Permission">Permissions</option></select></div><div className="event-list large-event-list">{eventRows(filteredEvents.filter(e=>e.severity!=='Normal'||filter==='All'))}</div><div className="panel-foot"><span>{pending} unreviewed alerts</span><span>Review actions are stored locally</span></div></section></>}
+      <footer><span>E.D.I.T.H. <i>·</i> Enhanced Digital Identity, Trust & Heuristics</span><span>HACKATHON PROTOTYPE <i>·</i> NOT A LIVE SECURITY SERVICE</span></footer>
+    </div></main>
+    {showNotifications&&<div className="notification-pop"><div className="panel-head"><b>Notification centre</b><button className="text-btn" onClick={()=>setShowNotifications(false)}>Close</button></div><p>{pending} alerts need review.</p>{events.filter(e=>e.severity!=='Normal'&&!e.ack).slice(0,4).map(e=><div className="notification-item" key={e.id}><b>{e.detail}</b><small>{e.app} · {e.time}</small></div>)}{pending===0&&<div className="empty-state">You're all caught up.</div>}<button className="text-btn" onClick={()=>{setPage('alerts');setShowNotifications(false)}}>Open alert inbox →</button></div>}
+    {notice&&<div className="toast">✓ &nbsp; {notice}</div>}
+  </div>;
 }
-
 export default App;
