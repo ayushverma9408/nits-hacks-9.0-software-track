@@ -1,4 +1,4 @@
-const HIGH_RISK_WORDS = ["unrecognized", "unknown device", "impossible travel", "suspicious", "unusual session"];
+const HIGH_RISK_WORDS = ["unrecognized", "unknown device", "impossible travel", "suspicious", "unusual session", "unusual sign-in"];
 const MEDIUM_RISK_WORDS = ["permission requested", "new location", "scope expanded", "multiple failures"];
 
 export function assessEvent(input = {}) {
