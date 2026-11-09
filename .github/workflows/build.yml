@@ -18,5 +18,9 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
-      - name: Build production bundle
+      - name: Test detection engine
+        run: npm test
+      - name: Build production frontend
         run: npm run build
+      - name: Check backend syntax
+        run: node --check server/index.js && node --check server/db.js && node --check server/detection.js
