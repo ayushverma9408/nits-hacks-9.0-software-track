@@ -17,7 +17,7 @@ const seedEvents = [
 ];
 const weekly = [{day:'MON',value:35},{day:'TUE',value:52},{day:'WED',value:42},{day:'THU',value:70},{day:'FRI',value:48},{day:'SAT',value:88},{day:'SUN',value:60}];
 const nav = [{id:'overview',label:'Overview',icon:LayoutDashboard},{id:'applications',label:'Applications',icon:Layers3},{id:'permissions',label:'Permissions',icon:ShieldCheck},{id:'activity',label:'Activity monitor',icon:Activity},{id:'alerts',label:'Alerts & notifications',icon:TriangleAlert}];
-const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\\/$/, '');
+const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
 async function apiRequest(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
